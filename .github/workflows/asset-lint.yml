@@ -1,0 +1,66 @@
+name: Asset lint
+
+# Run this pipeline for every pull request and every push on the main branch
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+# It needs two permissions:
+#   1) to read the repository, and
+#   2) write the resulting SARIF file to Code scanning
+permissions:
+  contents: read
+  security-events: write
+
+# This is the actual pipeline part. The demonstration is on linux, but it is really similar to windows
+jobs:
+  asset-lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      # It gets a fixed version of asset-lint.
+      # For self-hosted build executors, you might install a version system wide.
+      #    For example, on linux putting the unzipped binary under `/usr/local/bin`
+      #    Or on windows, put the unzipped executable somewhere and add the parent folder to PATH
+      # If you need always the latest version, use the below url (for linux):
+      # https://github.com/zerocukor287/asset-lint/releases/latest/download/asset-lint-x86_64-unknown-linux-gnu.tar.gz
+      - name: Download asset-lint
+        run: |
+          curl -L \
+            -o asset-lint.tar.gz \
+            https://github.com/zerocukor287/asset-lint/releases/download/v0.1.2/asset-lint-x86_64-unknown-linux-gnu.tar.gz
+          
+          tar -xzf asset-lint.tar.gz
+      
+      # This is the interesting part! The tool in action.
+      # Note that the tool returns non-zero if any warnings are found. We need
+      # to continue to be able to upload the quality report.
+      #
+      # These specific parameters are checking for duplicated assets, and assets containing "_final"
+      # in their name under the "./assets/" folder. Finally, exports a SARIF report
+      #
+      # For the complete list of possible checks, please go to
+      # https://github.com/zerocukor287/asset-lint/wiki#arguments
+      - name: Run asset-lint
+        id: asset-lint-step
+        continue-on-error: true
+        run: |
+          ./asset-lint --assets-path ./assets/ --no-duplicates --no-placeholders ".*_final.*" --sarif
+
+      # Upload the resulting `asset-lint.sarif` file to Code Scanning 
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: asset-lint.sarif
+          category: asset-lint
+      
+      # Optional step to fail the pipeline if asset-lint returned non-zero
+      # This turns warnings into errors
+      - name: Fail if asset-lint found issues
+        if: steps.asset-lint-step.outcome == 'failure'
+        run: exit 1
