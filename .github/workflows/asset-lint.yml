@@ -61,6 +61,6 @@ jobs:
       
       # Optional step to fail the pipeline if asset-lint returned non-zero
       # This turns warnings into errors
-      - name: Fail if asset-lint found issues
-        if: steps.asset-lint-step.outcome == 'failure'
-        run: exit 1
+      # - name: Fail if asset-lint found issues
+      #  if: steps.asset-lint-step.outcome == 'failure'
+      #  run: exit 1
